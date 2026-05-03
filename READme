@@ -1,6 +1,6 @@
-# Voice Debate AI Backend – Team Integration Guide
+# Voice Debate AI Backend – Integration Guide
 
-This backend powers the hec gen ai hackathon Voice-Based Debate AI application.
+This backend powers the Voice-Based Debate AI application.
 
 It handles:
 
@@ -162,7 +162,7 @@ Do NOT change prompt labels.
 
 # Audio Requirements (CRITICAL)
 
-Frontend / Audio teammate must send:
+Frontend must send:
 
 .wav
 mono channel
@@ -193,7 +193,7 @@ Pipeline includes:
 * feedback
 * TTS generation
 
-This is optimized for hackathon demo.
+This is optimized for demo.
 
 # Fallback Safety
 
@@ -230,7 +230,7 @@ Before changing code:
 * delete fallback logic
 * change prompt labels casually
 
-# Teammate Responsibilities
+# User Responsibilities
 
 ## Frontend
 
@@ -280,13 +280,13 @@ Responsible for:
 
 # Emergency Backup Rule
 
-Before hackathon final demo:
+Before use:
 
 Create:
 
 backup/app_final_working_backup.py
 
-Never demo without backup.
+Never use without backup.
 
 Never trust live APIs without fallback.
 
@@ -302,9 +302,9 @@ Focus on:
 
 * fast response
 * strong debate quality
-* smooth demo experience
+* smooth experience
 
-That wins hackathons.
+That wins projects.
 
 # Owner Notes
 
