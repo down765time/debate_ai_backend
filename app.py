@@ -1,10 +1,16 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from pydub import AudioSegment
+from pydub.silence import detect_nonsilent
 from gtts import gTTS
 from dotenv import load_dotenv
+import uvicorn
 import whisper
+import noisereduce as nr
+import numpy as np
+import wave
 import time
 import requests
 import shutil
@@ -12,24 +18,35 @@ import uuid
 import os
 import re
 
+# ── Member 3 config ──
+SAMPLE_RATE  = 16000
+CHANNELS     = 1
+SAMPLE_WIDTH = 2
+MAX_CHUNK_MS = 25_000
+
 # =========================
 # LOAD ENV VARIABLES
 # =========================
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+load_dotenv(dotenv_path=ENV_PATH)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
 if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY not found in .env")
+    raise ValueError(f"GROQ_API_KEY not found in {ENV_PATH}")
 
-print("GROQ API Key loaded successfully")
+if not ELEVENLABS_API_KEY:
+    raise ValueError(f"ELEVENLABS_API_KEY not found in {ENV_PATH}")
+
+print("API keys loaded successfully")
 
 # =========================
 # FOLDERS SETUP
 # =========================
 
-BASE_DIR = Path("debate_backend")
 INPUT_DIR = BASE_DIR / "input"
 OUTPUT_DIR = BASE_DIR / "output"
 
@@ -52,22 +69,129 @@ print("Whisper loaded successfully")
 
 app = FastAPI()
 
+# ── CORS — Frontend (localhost:0.0.0.0) ko backend se baat karne deta hai ──
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+def home():
+    return {"message": "Server is running"}
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=port
+    )
+
 REQUEST_STORE = {}
 
 # =========================
 # HELPER FUNCTIONS
 # =========================
 
+# =========================
+# MEMBER 3 — AUDIO PROCESSING
+# =========================
+
 def convert_to_wav(input_path, output_path):
+    """MEMBER 3 — STEP 1: FORMAT CONVERSION
+    Converts any audio (webm, ogg, mp3) to WAV 16kHz mono 16-bit.
+    Frontend sends webm from browser — this handles that."""
     audio = AudioSegment.from_file(input_path)
-    audio = audio.set_channels(1)
-    audio = audio.set_frame_rate(16000)
+    audio = audio.set_channels(CHANNELS)
+    audio = audio.set_frame_rate(SAMPLE_RATE)
+    audio = audio.set_sample_width(SAMPLE_WIDTH)
     audio.export(output_path, format="wav")
+    print(f"[M3-CONVERT] Done → {output_path}")
+
+
+def reduce_noise(wav_path: str) -> str:
+    """MEMBER 3 — STEP 2: NOISE REDUCTION
+    Removes background noise using first 0.5s as noise profile."""
+    print(f"[M3-DENOISE] Reducing noise...")
+    with wave.open(wav_path, 'rb') as wf:
+        rate   = wf.getframerate()
+        frames = wf.readframes(wf.getnframes())
+
+    samples      = np.frombuffer(frames, dtype=np.int16).astype(np.float32)
+    noise_sample = samples[:int(rate * 0.5)]
+    denoised     = nr.reduce_noise(y=samples, sr=rate, y_noise=noise_sample, prop_decrease=0.75)
+
+    output_path = wav_path.replace(".wav", "_denoised.wav")
+    with wave.open(output_path, 'wb') as wf:
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(SAMPLE_WIDTH)
+        wf.setframerate(rate)
+        wf.writeframes(denoised.astype(np.int16).tobytes())
+
+    print(f"[M3-DENOISE] Done → {output_path}")
+    return output_path
+
+
+def strip_silence(wav_path: str) -> str:
+    """MEMBER 3 — STEP 3: SILENCE REMOVAL
+    Removes silent gaps to prevent Whisper hallucinations."""
+    print(f"[M3-SILENCE] Stripping silence...")
+    audio      = AudioSegment.from_wav(wav_path)
+    non_silent = detect_nonsilent(audio, min_silence_len=500, silence_thresh=-40)
+
+    if not non_silent:
+        print("[M3-SILENCE] Audio fully silent, skipping.")
+        return wav_path
+
+    trimmed     = sum(audio[s:e] for s, e in non_silent)
+    output_path = wav_path.replace(".wav", "_trimmed.wav")
+    trimmed.export(output_path, format="wav")
+    print(f"[M3-SILENCE] Done → {output_path}")
+    return output_path
 
 
 def speech_to_text(audio_path):
-    result = whisper_model.transcribe(str(audio_path))
-    return result["text"].strip()
+    """MEMBER 3 — STEP 4: TRANSCRIPTION
+    Full pipeline: noise reduction → silence removal → Whisper.
+    Handles audio longer than 30s automatically."""
+    wav_path     = str(audio_path)
+    denoised     = reduce_noise(wav_path)
+    trimmed      = strip_silence(denoised)
+
+    print(f"[M3-WHISPER] Transcribing...")
+    audio    = AudioSegment.from_wav(trimmed)
+    duration = len(audio)
+
+    if duration <= 30_000:
+        result = whisper_model.transcribe(trimmed, language="en", fp16=False)
+        text   = result["text"].strip()
+    else:
+        print(f"[M3-WHISPER] Long audio ({duration/1000:.1f}s) — chunking...")
+        import tempfile
+        texts, start = [], 0
+        while start < duration:
+            end   = min(start + MAX_CHUNK_MS, duration)
+            chunk = audio[start:end]
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                chunk.export(tmp.name, format="wav")
+                r = whisper_model.transcribe(tmp.name, language="en", fp16=False)
+                texts.append(r["text"].strip())
+                os.unlink(tmp.name)
+            start += MAX_CHUNK_MS - 1000
+        text = " ".join(texts)
+
+    for f in [denoised, trimmed]:
+        if f != wav_path and os.path.exists(f):
+            os.unlink(f)
+
+    print(f"[M3-WHISPER] Transcript: '{text}'")
+    return text
 
 
 def generate_gpt_response(text):
