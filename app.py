@@ -69,7 +69,7 @@ print("Whisper loaded successfully")
 
 app = FastAPI()
 
-# ── CORS — Frontend (localhost:0.0.0.0) ko backend se baat karne deta hai ──
+# ── CORS — Frontend ko backend se baat karne deta hai ──
 
 
 app.add_middleware(
