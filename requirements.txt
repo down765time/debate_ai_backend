@@ -1,10 +1,11 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
 openai-whisper
 gtts
 python-dotenv
 requests
+numpy==1.26.4
 torch==2.2.2+cpu
 torchaudio==2.2.2+cpu
 --extra-index-url https://download.pytorch.org/whl/cpu
