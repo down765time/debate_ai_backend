@@ -476,6 +476,9 @@ def home():
 def health():
     return {"status": "ok"}
 
+@app.options("/debate")
+async def options_debate():
+    return {"ok": True}
 
 @app.post("/debate")
 async def debate(file: UploadFile = File(...)):
