@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from gtts import gTTS
 from dotenv import load_dotenv
+from pydub import AudioSegment
 import uvicorn
 import whisper
 import wave
@@ -86,6 +87,17 @@ REQUEST_STORE = {}
 # =========================
 # MEMBER 3 — AUDIO PROCESSING
 # =========================
+
+def convert_to_wav(input_path, output_path):
+    audio = AudioSegment.from_file(input_path)
+
+    audio = audio.set_channels(CHANNELS)
+    audio = audio.set_frame_rate(SAMPLE_RATE)
+    audio = audio.set_sample_width(SAMPLE_WIDTH)
+
+    audio.export(output_path, format="wav")
+
+    print(f"[CONVERT] Done -> {output_path}")
 
 
 def speech_to_text(audio_path):
@@ -321,44 +333,52 @@ def run_pipeline_real(normalized_audio_path, request_id):
     try:
         print("NEW PIPELINE IS RUNNING")
 
-        # Log start time
         start_time = time.time()
-        print = ("LOG TIME START")
 
-        # Step 1: Speech to text
-        print = ("STEP 1 START")
+        # STEP 1 — Whisper
+        print("STEP 1 START")
+
         transcript = speech_to_text(normalized_audio_path)
-        print = ("STEP 1 DONE")
 
-        # Step 2: Gemini response
-        print = ("STEP 2 START")
+        print("STEP 1 DONE")
+
+        # STEP 2 — Groq
+        print("STEP 2 START")
+
         raw_reply = generate_gpt_response(transcript)
-        print = ("STEP 2 DONE")
 
-        # Step 3: Parse Groq output
-        print = ("STEP 3 START")
+        print("STEP 2 DONE")
+
+        # STEP 3 — Parse
+        print("STEP 3 START")
+
         parsed = parse_groq_output(raw_reply)
 
         argument = parsed["argument"]
         score = parsed["score"]
         feedback = parsed["feedback"]
-        print = ("STEP 3 DONE")
 
-        # Step 4: Text to speech
-        print = ("STEP 4 START")
+        print("STEP 3 DONE")
+
+        # STEP 4 — TTS
+        print("STEP 4 START")
+
         response_audio_path = OUTPUT_DIR / f"{request_id}_response.mp3"
-        text_to_speech(argument, response_audio_path)
-        print = ("STEP 4 DONE")
 
-        # Log processing time
+        text_to_speech(argument, response_audio_path)
+
+        print("STEP 4 DONE")
+
+        # Processing time
         end_time = time.time()
-        print = ("LOG TIME END")
+
         processing_time = round(end_time - start_time, 2)
 
         print(f"Total Processing Time: {processing_time} seconds")
 
-        # Step 5: Final result
-        print = ("STEP 5 START")
+        # Final response
+        print("STEP 5 START")
+
         result = {
             "request_id": request_id,
             "status": "success",
@@ -377,12 +397,16 @@ def run_pipeline_real(normalized_audio_path, request_id):
             "processing_time_seconds": processing_time,
             "detail": None,
         }
-        print = ("STEP 5 DONE")
+
+        print("STEP 5 DONE")
 
         REQUEST_STORE[request_id] = result
+
         return result
 
     except Exception as e:
+        print("PIPELINE ERROR:", str(e))
+
         return {
             "request_id": request_id,
             "status": "error",
