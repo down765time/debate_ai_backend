@@ -2,15 +2,10 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
-from pydub import AudioSegment
-from pydub.silence import detect_nonsilent
 from gtts import gTTS
 from dotenv import load_dotenv
 import uvicorn
 import whisper
-import noisereduce as nr
-import numpy as np
-import wave
 import time
 import requests
 import shutil
@@ -91,94 +86,19 @@ REQUEST_STORE = {}
 # MEMBER 3 — AUDIO PROCESSING
 # =========================
 
-def convert_to_wav(input_path, output_path):
-    """MEMBER 3 — STEP 1: FORMAT CONVERSION
-    Converts any audio (webm, ogg, mp3) to WAV 16kHz mono 16-bit.
-    Frontend sends webm from browser — this handles that."""
-    audio = AudioSegment.from_file(input_path)
-    audio = audio.set_channels(CHANNELS)
-    audio = audio.set_frame_rate(SAMPLE_RATE)
-    audio = audio.set_sample_width(SAMPLE_WIDTH)
-    audio.export(output_path, format="wav")
-    print(f"[M3-CONVERT] Done → {output_path}")
-
-
-def reduce_noise(wav_path: str) -> str:
-    """MEMBER 3 — STEP 2: NOISE REDUCTION
-    Removes background noise using first 0.5s as noise profile."""
-    print(f"[M3-DENOISE] Reducing noise...")
-    with wave.open(wav_path, 'rb') as wf:
-        rate   = wf.getframerate()
-        frames = wf.readframes(wf.getnframes())
-
-    samples      = np.frombuffer(frames, dtype=np.int16).astype(np.float32)
-    noise_sample = samples[:int(rate * 0.5)]
-    denoised     = nr.reduce_noise(y=samples, sr=rate, y_noise=noise_sample, prop_decrease=0.75)
-
-    output_path = wav_path.replace(".wav", "_denoised.wav")
-    with wave.open(output_path, 'wb') as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(SAMPLE_WIDTH)
-        wf.setframerate(rate)
-        wf.writeframes(denoised.astype(np.int16).tobytes())
-
-    print(f"[M3-DENOISE] Done → {output_path}")
-    return output_path
-
-
-def strip_silence(wav_path: str) -> str:
-    """MEMBER 3 — STEP 3: SILENCE REMOVAL
-    Removes silent gaps to prevent Whisper hallucinations."""
-    print(f"[M3-SILENCE] Stripping silence...")
-    audio      = AudioSegment.from_wav(wav_path)
-    non_silent = detect_nonsilent(audio, min_silence_len=500, silence_thresh=-40)
-
-    if not non_silent:
-        print("[M3-SILENCE] Audio fully silent, skipping.")
-        return wav_path
-
-    trimmed     = sum(audio[s:e] for s, e in non_silent)
-    output_path = wav_path.replace(".wav", "_trimmed.wav")
-    trimmed.export(output_path, format="wav")
-    print(f"[M3-SILENCE] Done → {output_path}")
-    return output_path
-
-
 def speech_to_text(audio_path):
-    """MEMBER 3 — STEP 4: TRANSCRIPTION
-    Full pipeline: noise reduction → silence removal → Whisper.
-    Handles audio longer than 30s automatically."""
-    wav_path     = str(audio_path)
-    denoised     = reduce_noise(wav_path)
-    trimmed      = strip_silence(denoised)
+    print(f"[WHISPER] Transcribing...")
 
-    print(f"[M3-WHISPER] Transcribing...")
-    audio    = AudioSegment.from_wav(trimmed)
-    duration = len(audio)
+    result = whisper_model.transcribe(
+        str(audio_path),
+        language="en",
+        fp16=False
+    )
 
-    if duration <= 30_000:
-        result = whisper_model.transcribe(trimmed, language="en", fp16=False)
-        text   = result["text"].strip()
-    else:
-        print(f"[M3-WHISPER] Long audio ({duration/1000:.1f}s) — chunking...")
-        import tempfile
-        texts, start = [], 0
-        while start < duration:
-            end   = min(start + MAX_CHUNK_MS, duration)
-            chunk = audio[start:end]
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                chunk.export(tmp.name, format="wav")
-                r = whisper_model.transcribe(tmp.name, language="en", fp16=False)
-                texts.append(r["text"].strip())
-                os.unlink(tmp.name)
-            start += MAX_CHUNK_MS - 1000
-        text = " ".join(texts)
+    text = result["text"].strip()
 
-    for f in [denoised, trimmed]:
-        if f != wav_path and os.path.exists(f):
-            os.unlink(f)
+    print(f"[WHISPER] Transcript: '{text}'")
 
-    print(f"[M3-WHISPER] Transcript: '{text}'")
     return text
 
 
@@ -491,14 +411,8 @@ async def debate(file: UploadFile = File(...)):
 
       
     # If already WAV, skip conversion
-    if file.filename.lower().endswith(".wav"):
-        print("WAV file detected — skipping conversion")
-        normalized_audio_path = input_file_path
-
-    else: 
-        print("Non-WAV file detected — converting to WAV")
-        normalized_audio_path = INPUT_DIR / f"{request_id}_normalized.wav"
-        convert_to_wav(input_file_path, normalized_audio_path)
+    
+    normalized_audio_path = input_file_path
 
     result = run_pipeline_real(normalized_audio_path, request_id)
 
