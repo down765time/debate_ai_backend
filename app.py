@@ -323,22 +323,29 @@ def run_pipeline_real(normalized_audio_path, request_id):
         start_time = time.time()
 
         # Step 1: Speech to text
+        print = ("STEP 1 START")
         transcript = speech_to_text(normalized_audio_path)
-
+        print = ("STEP 1 DONE")
 
         # Step 2: Gemini response
+        print = ("STEP 2 START")
         raw_reply = generate_gpt_response(transcript)
+        print = ("STEP 2 DONE")
 
         # Step 3: Parse Groq output
+        print = ("STEP 3 START")
         parsed = parse_groq_output(raw_reply)
 
         argument = parsed["argument"]
         score = parsed["score"]
         feedback = parsed["feedback"]
+        print = ("STEP 3 DONE")
 
         # Step 4: Text to speech
+        print = ("STEP 4 START")
         response_audio_path = OUTPUT_DIR / f"{request_id}_response.mp3"
         text_to_speech(argument, response_audio_path)
+        print = ("STEP 4 DONE")
 
         # Log processing time
         end_time = time.time()
@@ -347,6 +354,7 @@ def run_pipeline_real(normalized_audio_path, request_id):
         print(f"Total Processing Time: {processing_time} seconds")
 
         # Step 5: Final result
+        print = ("STEP 5 START")
         result = {
             "request_id": request_id,
             "status": "success",
@@ -382,6 +390,7 @@ def run_pipeline_real(normalized_audio_path, request_id):
             "feedback": None,
             "detail": str(e),
         }
+        print = ("STEP 5 DONE")
 
 # =========================
 # API ROUTES
