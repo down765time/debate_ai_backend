@@ -412,8 +412,15 @@ async def debate(file: UploadFile = File(...)):
       
     # If already WAV, skip conversion
     
-    normalized_audio_path = input_file_path
+    if file.filename.lower().endswith(".wav"):
+        print("WAV file detected — skipping conversion")
+        normalized_audio_path = input_file_path
+    else:
+        print("Non-WAV file detected — converting to WAV")
+        normalized_audio_path = INPUT_DIR / f"{request_id}_normalized.wav"
+        convert_to_wav(input_file_path, normalized_audio_path)
 
+        
     result = run_pipeline_real(normalized_audio_path, request_id)
 
 
