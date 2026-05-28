@@ -57,7 +57,7 @@ print("Folders ready")
 # =========================
 
 print("Loading Whisper model... please wait")
-whisper_model = whisper.load_model("tiny")
+whisper_model = whisper.load_model("tiny.en")
 print("Whisper loaded successfully")
 
 # =========================
@@ -107,6 +107,9 @@ def speech_to_text(audio_path):
         str(audio_path),
         language="en",
         fp16=False
+        temperature=0,
+        best_of=1,
+        beam_size=1
     )
 
     text = result["text"].strip()
