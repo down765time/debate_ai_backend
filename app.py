@@ -88,17 +88,6 @@ REQUEST_STORE = {}
 # MEMBER 3 — AUDIO PROCESSING
 # =========================
 
-def convert_to_wav(input_path, output_path):
-    audio = AudioSegment.from_file(input_path)
-
-    audio = audio.set_channels(CHANNELS)
-    audio = audio.set_frame_rate(SAMPLE_RATE)
-    audio = audio.set_sample_width(SAMPLE_WIDTH)
-
-    audio.export(output_path, format="wav")
-
-    print(f"[CONVERT] Done -> {output_path}")
-
 
 def speech_to_text(audio_path):
     print(f"[WHISPER] Transcribing...")
@@ -451,10 +440,7 @@ async def debate(file: UploadFile = File(...)):
 
       
     # If already WAV, skip conversion
-    normalized_audio_path = INPUT_DIR / f"{request_id}_normalized.wav"
-
-    convert_to_wav(input_file_path, normalized_audio_path)
-
+   
     result = run_pipeline_real(normalized_audio_path, request_id)
 
 
