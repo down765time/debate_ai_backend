@@ -439,9 +439,8 @@ async def debate(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
       
-    # If already WAV, skip conversion
-   
-    result = run_pipeline_real(normalized_audio_path, request_id)
+    # Directly use uploaded WEBM file
+    result = run_pipeline_real(input_file_path, request_id)
 
 
     result["input_file"] = input_file_path.name
