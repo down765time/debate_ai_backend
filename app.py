@@ -106,7 +106,7 @@ def speech_to_text(audio_path):
     result = whisper_model.transcribe(
         str(audio_path),
         language="en",
-        fp16=False
+        fp16=False,
         temperature=0,
         best_of=1,
         beam_size=1
